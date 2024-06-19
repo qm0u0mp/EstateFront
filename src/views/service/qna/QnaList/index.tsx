@@ -1,14 +1,16 @@
-import React, { ChangeEvent, useEffect, useState } from 'react';
+import { ChangeEvent, useEffect, useState } from 'react';
 import './style.css'
 import { useUserStore } from 'src/stores';
 import { useNavigate } from 'react-router';
 import { AUTH_ABSOLUTE_PATH, COUNT_PER_PAGE, COUNT_PER_SECTION, QNA_DETAIL_ABSOLUTE_PATH, QNA_WRITE_ABSOLUTE_PATH } from 'src/constant';
 import { BoardListItem } from 'src/types';
-import { getBoardListRequest, getSearchBoardListRequest } from 'src/apis/board';
+import { getSearchBoardListRequest } from 'src/apis/board';
 import { useCookies } from 'react-cookie';
-import { GetBoardListResponseDto, GetSearchBoardListResponseDto } from 'src/apis/board/dto/response';
+import { GetSearchBoardListResponseDto } from 'src/apis/board/dto/response';
 import ResponseDto from 'src/apis/response.dto';
+import { usePagination } from 'src/hooks';
 
+//                    component                    //
 function ListItem ({ 
     receptionNumber, 
     status, 
@@ -18,10 +20,13 @@ function ListItem ({
     viewCount 
 }: BoardListItem) {
 
+    //                    function                    //
     const navigator = useNavigate();
 
+    //                    event handler                    //
     const onClickHandler = () => navigator(QNA_DETAIL_ABSOLUTE_PATH(receptionNumber));
 
+    //                    render                    //
     return (
         <div className='qna-list-table-tr' onClick={onClickHandler}>
             <div className='qna-list-table-reception-number'>{receptionNumber}</div>
@@ -39,104 +44,32 @@ function ListItem ({
     );
 }
 
+//                    component                    //
 export default function QnaList() {
 
+    //                    state                    //
     const {loginUserRole} = useUserStore();
+    const {
+        viewList,
+        pageList,
+        totalPage,
+        currentPage,
+        totalLenght,
+        setCurrentPage,
+        setCurrentSection,
+        changeBoardList,
+        onPageClickHandler,
+        onPreSectionClickHandler,
+        onNextSectionClickHandler
+    } = usePagination<BoardListItem>(COUNT_PER_PAGE, COUNT_PER_SECTION);
 
     const [cookies] = useCookies();
 
-    const [boardList, setBoardList] = useState<BoardListItem[]>([]);
-    const [viewList, setViewList] = useState<BoardListItem[]>([]);
-    const [totalLenght, setTotalLength] = useState<number>(0);
-    const [totalPage, setTotalPage] = useState<number>(1);
-    const [currentPage, setCurrentPage] = useState<number>(1);
-    const [pageList, setPageList] = useState<number[]>([1]);
-    const [totalSection, setTotalSection] = useState<number>(1);
-    const [currentSection, setCurrentSection] = useState<number>(1);
     const [isToggleOn, setToggleOn] = useState<boolean>(false);
-
     const [searchWord, setSearchWord] = useState<string>('');
 
+    //                    function                    //
     const navigator = useNavigate();
-
-    const changePage = (boardList: BoardListItem[], totalLenght: number) => {
-        if(!currentPage) {
-            return;
-        }
-
-        const startIndex = (currentPage - 1) * COUNT_PER_PAGE;
-
-        let endIndex = currentPage * COUNT_PER_PAGE;
-
-        if (endIndex > totalLenght - 1) {
-            endIndex = totalLenght;
-        }
-        
-        const viewList = boardList.slice(startIndex, endIndex);
-        setViewList(viewList);
-    };
-
-    const changeSection = (totalPage: number) => {
-        if(!currentPage) {
-            return;
-        }
-
-        const startPage = (currentSection * COUNT_PER_SECTION) - (COUNT_PER_SECTION - 1);
-        let endPage = currentSection * COUNT_PER_SECTION;
-
-        if (endPage > totalPage) {
-            endPage = totalPage;
-        }
-        
-        const pageList: number[] = [];
-
-        for (let page = startPage; page <= endPage; page++) pageList.push(page);
-
-        setPageList(pageList);
-    };
-
-    const changeBoardList = (boardList: BoardListItem[]) => {
-        
-        // filter : 배열에서 filter 함수를 호출하면 콜백함수 전달 받음
-        // boarList 안의 배열을 반환함
-        // true, false 값들만 반환함
-        if(isToggleOn){
-            boardList = boardList.filter(board => !board.status);
-        }
-        setBoardList(boardList);
-
-        const totalLenght = boardList.length;
-        setTotalLength(totalLenght);
-
-        const totalPage = Math.floor((totalLenght - 1) / COUNT_PER_PAGE) + 1;
-        setTotalPage(totalPage);
-
-        const totalSection = Math.floor((totalPage - 1) / COUNT_PER_SECTION) + 1;
-        setTotalSection(totalSection);
-
-        changePage(boardList, totalLenght);
-
-        changeSection(totalPage);
-    };
-
-    const getBoardListResponse = (result: GetBoardListResponseDto | ResponseDto | null) => {
-        const message = 
-            !result ? '서버에 문제가 있습니다.' :
-            result.code === 'AF' ? '인증에 실패했습니다.' : 
-            result.code === 'DBE' ? '서버에 문제가 있습니다.' : '';
-
-        if (!result || result.code !== 'SU') {
-            alert(message);
-            if (result?.code === 'AF') navigator(AUTH_ABSOLUTE_PATH);
-            return;
-        }
-
-        const { boardList } = result as GetBoardListResponseDto;
-        changeBoardList(boardList);
-
-        setCurrentPage(!boardList.length ? 0 : 1);
-        setCurrentSection(!boardList.length ? 0 : 1);
-    };
 
     const getSearchBoardListResponse = (result: GetSearchBoardListResponseDto | ResponseDto | null) => {
 
@@ -153,13 +86,13 @@ export default function QnaList() {
         }
 
         const { boardList } = result as GetSearchBoardListResponseDto;
-        changeBoardList(boardList);
+        changeBoardList(boardList, isToggleOn);
 
         setCurrentPage(!boardList.length ? 0 : 1);
         setCurrentSection(!boardList.length ? 0 : 1);
-
     };
 
+    //                    event handler                    //
     const onWriteButtonClickHandler = () => {
         if (loginUserRole !== 'ROLE_USER') return;
         navigator(QNA_WRITE_ABSOLUTE_PATH);
@@ -168,22 +101,6 @@ export default function QnaList() {
     const onToggleClickHandler = () => {
         if (loginUserRole !== 'ROLE_ADMIN') return;
         setToggleOn(!isToggleOn);
-    };
-
-    const onPageClickHandler = (page: number) => {
-        setCurrentPage(page);
-    };
-
-    const onPreSectionClickHandler = () => {
-        if (currentSection <= 1) return;
-        setCurrentSection(currentSection - 1);
-        setCurrentPage((currentSection - 1) * COUNT_PER_SECTION);
-    };
-
-    const onNextSectionClickHandler = () => {
-        if (currentSection === totalSection) return;
-        setCurrentSection(currentSection + 1);
-        setCurrentPage(currentSection * COUNT_PER_SECTION + 1);
     };
 
     const onSearchWordChangeHandler = (event: ChangeEvent<HTMLInputElement>) => {
@@ -198,21 +115,13 @@ export default function QnaList() {
         getSearchBoardListRequest(searchWord, cookies.accessToken).then(getSearchBoardListResponse);
     };
 
+    //                    effect                    //
     useEffect(() => {
         if (!cookies.accessToken) return;
-        getSearchBoardListRequest(searchWord,cookies.accessToken).then(getSearchBoardListResponse);
+        getSearchBoardListRequest(searchWord, cookies.accessToken).then(getSearchBoardListResponse);
     }, [isToggleOn]);
-
-    useEffect(() => {
-        if (!boardList.length) return;
-        changePage(boardList, totalLenght);
-    }, [currentPage]);
-
-    useEffect(() => {
-        if (!boardList.length) return;
-        changeSection(totalPage);
-    }, [currentSection]);
     
+    //                    render                    //
     const toggleClass = isToggleOn ? 'toggle-active' : 'toggle';
     const searchButtonClass = searchWord ? 'primary-button' : 'disable-button';
     return (
